@@ -8,7 +8,7 @@ RUN dnf -y update && \
 ADD requirements.txt /
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-EXPOSE 443
+EXPOSE 80
 
 RUN dnf -y install CBFlib && dnf clean all
 

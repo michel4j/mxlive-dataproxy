@@ -73,7 +73,7 @@ def send_raw_file(request, full_path, attachment=False):
     file_path = original_path if os.path.exists(original_path) else archived_path
     if not os.path.exists(file_path):
         logger.warning("Path not found: {}".format(file_path))
-        raise Http404
+        return http.HttpResponseNotFound()
 
     if FRONTEND == "xsendfile":
         response = HttpResponse()
@@ -155,7 +155,7 @@ def send_archive(request, path, key=None):  # Add base parameter and another url
 
     target_path = target_path.rstrip(os.sep)
     if len(target_path.split(os.sep)) < 4:
-        raise http.HttpResponseForbidden()
+        return http.HttpResponseForbidden()
 
     archived_path = re.sub(ROOT_RE, ARCHIVE_ROOT, target_path)
     source_path = os.path.normpath(target_path if os.path.exists(target_path) else archived_path)
@@ -172,5 +172,5 @@ def send_archive(request, path, key=None):  # Add base parameter and another url
 
         return response
     else:
-        raise http.HttpResponseNotFound()
+        return http.HttpResponseNotFound()
 
