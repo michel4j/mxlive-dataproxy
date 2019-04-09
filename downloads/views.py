@@ -40,7 +40,7 @@ class CreatePath(View):
     def post(self, request, *args, **kwargs):
         path = request.POST.get('path')
         obj = SecurePath()
-        obj.path = re.sub(ROOT_RE, USER_ROOT, path)
+        obj.path = path if path.startswith(USER_ROOT) else os.path.join(USER_ROOT, path)
         obj.save()
         return JsonResponse({'key': obj.key})
 
@@ -79,7 +79,7 @@ def send_raw_file(request, full_path, attachment=False):
         response = HttpResponse()
         response['X-Sendfile'] = file_path
         if attachment:
-            response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(full_path)
+            response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(file_path)
 
         # Unset the Content-Type as to allow for the webserver
         # to determine it.
@@ -90,7 +90,7 @@ def send_raw_file(request, full_path, attachment=False):
         response['X-Accel-Redirect'] = file_path
 
         if attachment:
-            response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(full_path)
+            response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(file_path)
         response['Content-Type'] = ''
 
     else:
@@ -103,7 +103,7 @@ def send_raw_file(request, full_path, attachment=False):
     return response
 
 
-def send_sample_gif(request, key, path):
+def send_snapshot(request, key, path):
     directory = get_download_path(key)
     if os.path.exists(directory):
         filename = os.path.join(CACHE_DIR, key, '{}.gif'.format(path))
@@ -122,27 +122,26 @@ def send_sample_gif(request, key, path):
             except subprocess.CalledProcessError:
                 return http.HttpResponseNotFound()
             return send_raw_file(request, filename, attachment=False)
-
     return http.HttpResponseNotFound()
 
 
 def send_file(request, key, path):
+
     document_root = get_download_path(key)
 
     # Clean up given path to only allow serving files below document_root.
     path = posixpath.normpath(urllib.unquote(path))
     drive, path = os.path.splitdrive(path)  # Remove drive in case path is absolute
     path = path.lstrip(os.path.sep)
-    full_path = os.path.join(document_root, path)
+    full_path = os.path.normpath(os.path.join(document_root, path))
+
     if not full_path.startswith(document_root):
         return http.HttpResponseNotFound()
 
     if os.path.exists('{}.gz'.format(full_path)):
         return send_uncompressed_file(request, key, full_path)
-    elif os.path.exists(full_path):
-        return send_raw_file(request, full_path)
 
-    return http.HttpResponseNotFound()
+    return send_raw_file(request, full_path)
 
 
 def send_archive(request, path, key=None):  # Add base parameter and another url
