@@ -1,2 +1,4 @@
 Django>=1.11.15
 django-cors-headers==2.1.0
+PyYaml==5.1
+pillow==6.0.0

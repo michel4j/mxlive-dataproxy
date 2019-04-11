@@ -2,15 +2,13 @@ FROM fedora:26
 MAINTAINER Kathryn Janzen <kathryn.janzen@lightsource.ca>
 
 RUN dnf -y update && \
-  dnf -y install httpd python-pip mod_wsgi postgresql-libs python-psycopg2 mod_xsendfile \
-  python-crypto python-memcached mod_ssl python-docutils unzip tar gzip ImageMagick && dnf clean all
+  dnf -y install httpd python-pip mod_wsgi postgresql-libs python-psycopg2 mod_xsendfile numpy scipy \
+  python-crypto python-memcached mod_ssl python-docutils unzip tar gzip ImageMagick CBFlib && dnf clean all
 
 ADD requirements.txt /
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 EXPOSE 80
-
-RUN dnf -y install CBFlib && dnf clean all
 
 ADD . /dataserver
 ADD ./local /dataserver/local

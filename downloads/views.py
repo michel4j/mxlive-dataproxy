@@ -13,14 +13,21 @@ import re
 import glob
 import subprocess
 import urllib
+import utils
 from django.http import StreamingHttpResponse
 
 
-CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
+# these are internal names to the application, and do not change between instances.
+CACHE_DIR = '/cache'
+USER_DIR = '/users'
+ARCHIVE_DIR = '/archive'
+
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
 USER_ROOT = getattr(settings, 'LDAP_USER_ROOT', '/users')
-ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/archive')
 ROOT_RE = re.compile('^{}'.format(USER_ROOT))
+ARCHIVE_RE = re.compile('^{}'.format(USER_DIR))
+
+BRIGHTNESS = {'xl': -1.5, 'nm': 0.0, 'dk': 1.5, 'lt': -0.5}
 
 import logging
 logging.basicConfig()
@@ -40,7 +47,8 @@ class CreatePath(View):
     def post(self, request, *args, **kwargs):
         path = request.POST.get('path')
         obj = SecurePath()
-        obj.path = path if path.startswith(USER_ROOT) else os.path.join(USER_ROOT, path)
+        full_path =  path if path.startswith(USER_ROOT) else os.path.join(USER_ROOT, path)
+        obj.path = re.sub(ROOT_RE, USER_DIR, full_path)
         obj.save()
         return JsonResponse({'key': obj.key})
 
@@ -68,7 +76,7 @@ def send_raw_file(request, full_path, attachment=False):
     Use django's static serve option for development servers"""
 
     original_path = full_path
-    archived_path = re.sub(ROOT_RE, ARCHIVE_ROOT, original_path)
+    archived_path = re.sub(ARCHIVE_RE, ARCHIVE_DIR, original_path)
 
     file_path = original_path if os.path.exists(original_path) else archived_path
     if not os.path.exists(file_path):
@@ -105,24 +113,47 @@ def send_raw_file(request, full_path, attachment=False):
 
 def send_snapshot(request, key, path):
     directory = get_download_path(key)
+    if not os.path.exists(directory):
+        directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
     if os.path.exists(directory):
-        filename = os.path.join(CACHE_DIR, key, '{}.gif'.format(path))
-        if os.path.exists(filename):
+        filename = os.path.join(CACHE_DIR, key, path)
+        original_file = os.path.join(directory, path)
+        name, ext = os.path.splitext(path)
+        pngs = glob.glob(os.path.join(directory, '{}_*.png'.format(name)))
+        if ext.lower() == '.gif' and os.path.exists(filename):
             return send_raw_file(request, filename, attachment=False)
-
-        pngs = glob.glob(os.path.join(directory, '*.png'))
-        if len(pngs) == 1:
+        elif ext == '.png' and os.path.exists(original_file):
+            return send_raw_file(request, original_file)
+        elif len(pngs) == 1:
             return send_raw_file(request, pngs[0], attachment=False)
         elif pngs:
             create_cache_dir(key)
             command = 'convert -delay 200 -resize 500x {0} {1}'.format(' '.join(pngs), filename)
             try:
                 subprocess.check_call(command.split())
-                subprocess.check_call(command.replace('_test-pic', '-pic').split())
             except subprocess.CalledProcessError:
                 return http.HttpResponseNotFound()
             return send_raw_file(request, filename, attachment=False)
-    return http.HttpResponseNotFound()
+    return send_raw_file(request, utils.get_missing_snapshot())
+
+
+def send_frame(request, key, path, brightness):
+    directory = get_download_path(key)
+    if not os.path.exists(directory):
+        directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
+    if os.path.exists(directory):
+        cache_path = os.path.splitext(path)[0]
+        frame_image = os.path.join(CACHE_DIR, key, cache_path, '{}.png'.format(brightness))
+        frame_file = os.path.join(directory, path)
+        if os.path.exists(frame_image):
+            return send_raw_file(request, frame_image, attachment=False)
+        elif os.path.exists(frame_file):
+            target_dir = os.path.dirname(frame_image)
+            if not os.path.exists(target_dir):
+                os.makedirs(target_dir)
+            utils.create_png(frame_file, frame_image, BRIGHTNESS.get(brightness, 0.0))
+            return send_raw_file(request, frame_image)
+    return send_raw_file(request, utils.get_missing_frame())
 
 
 def send_file(request, key, path):
@@ -144,19 +175,14 @@ def send_file(request, key, path):
     return send_raw_file(request, full_path)
 
 
-def send_archive(request, path, key=None):  # Add base parameter and another url
-    if key:
-        obj = get_object_or_404(SecurePath, key=key)
-        target_path = obj.path
-    else:
-        paths = SecurePath.objects.filter(key__in=request.GET.getlist('urls[]')).values_list('path',flat=True)
-        target_path = os.path.commonprefix(paths)
+def send_archive(request, key, path):  # Add base parameter and another url
+    obj = get_object_or_404(SecurePath, key=key)
+    target_path = obj.path.rstrip(os.sep)
 
-    target_path = target_path.rstrip(os.sep)
     if len(target_path.split(os.sep)) < 4:
         return http.HttpResponseForbidden()
 
-    archived_path = re.sub(ROOT_RE, ARCHIVE_ROOT, target_path)
+    archived_path = re.sub(ARCHIVE_RE, ARCHIVE_DIR, target_path)
     source_path = os.path.normpath(target_path if os.path.exists(target_path) else archived_path)
 
     if os.path.exists(source_path):
@@ -167,7 +193,7 @@ def send_archive(request, path, key=None):  # Add base parameter and another url
         )
 
         response = StreamingHttpResponse(p.stdout, content_type='application/x-gzip')
-        response['Content-Disposition'] = 'attachment; filename={0}.tar.gz'.format(path)
+        response['Content-Disposition'] = 'attachment; filename={}'.format(path)
 
         return response
     else:
