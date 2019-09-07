@@ -17,13 +17,14 @@ import utils
 from django.http import StreamingHttpResponse
 
 
-# these are internal names to the application, and do not change between instances.
-CACHE_DIR = '/cache'
-USER_DIR = '/users'
-ARCHIVE_DIR = '/archive'
-
+USER_DIR = getattr(settings, 'DOWNLOAD_USERS_DIR', '/users')
+ARCHIVE_DIR = getattr(settings, 'DOWNLOAD_ARCHIVE_DIR', '/archive')
+CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/cache')
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
+
 USER_ROOT = getattr(settings, 'LDAP_USER_ROOT', '/users')
+ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/users')
+
 ROOT_RE = re.compile('^{}'.format(USER_ROOT))
 ARCHIVE_RE = re.compile('^{}'.format(USER_DIR))
 
