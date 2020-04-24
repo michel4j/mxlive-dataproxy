@@ -8,9 +8,9 @@ export SERVER_NAME=${SERVER_NAME:-$(hostname --fqdn)}
 rm -rf /run/httpd/* /tmp/httpd*
 
 if [ ! -f /dataserver/local/.dbinit ]; then
-    /dataserver/manage.py syncdb --noinput &&
+    /dataserver/manage.py migrate --noinput &&
     touch /dataserver/local/.dbinit
-    chown -R apache:apache /dataserver/local/cache
+    chown -R apache:apache /cache
 fi
 
 exec /usr/sbin/httpd -DFOREGROUND -e debug

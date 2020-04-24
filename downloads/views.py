@@ -113,14 +113,18 @@ def send_raw_file(request, full_path, attachment=False):
 
 
 def send_snapshot(request, key, path):
-    directory = get_download_path(key)
+    try:
+        directory = get_download_path(key)
+    except:
+        return send_raw_file(request, utils.get_missing_snapshot())
+
     if not os.path.exists(directory):
         directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
     if os.path.exists(directory):
         filename = os.path.join(CACHE_DIR, key, path)
         original_file = os.path.join(directory, path)
         name, ext = os.path.splitext(path)
-        pngs = glob.glob(os.path.join(directory, '{}_*.png'.format(name)))
+        pngs = glob.glob(os.path.join(directory, '{}*.png'.format(name)))
         if ext.lower() == '.gif' and os.path.exists(filename):
             return send_raw_file(request, filename, attachment=False)
         elif ext == '.png' and os.path.exists(original_file):
@@ -139,7 +143,10 @@ def send_snapshot(request, key, path):
 
 
 def send_frame(request, key, path, brightness):
-    directory = get_download_path(key)
+    try:
+        directory = get_download_path(key)
+    except:
+        return send_raw_file(request, utils.get_missing_frame())
     if not os.path.exists(directory):
         directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
     if os.path.exists(directory):
@@ -158,9 +165,7 @@ def send_frame(request, key, path, brightness):
 
 
 def send_file(request, key, path):
-
     document_root = get_download_path(key)
-
     # Clean up given path to only allow serving files below document_root.
     path = posixpath.normpath(urllib.unquote(path))
     drive, path = os.path.splitdrive(path)  # Remove drive in case path is absolute
