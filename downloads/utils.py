@@ -1,15 +1,21 @@
+from django.conf import settings
+from django.shortcuts import get_object_or_404
+
+from downloads.models import SecurePath
+
 import os
 import pickle
 import numpy
 import shutil
 from PIL import Image
 
-from django.conf import settings
-from imageio import read_image
-from imageio.utils import stretch
+from mxio import read_image
+from mxio.utils import stretch
+
 
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
-COLORMAPS = pickle.load(file(os.path.join(DATA_DIR, 'colormaps.data')))
+COLOR_FILE = open(os.path.join(DATA_DIR, 'colormaps.data'), 'rb')
+COLORMAPS = pickle.load(COLOR_FILE)
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
 
 # Modify default colormap to add overloaded pixel effect
@@ -17,6 +23,13 @@ COLORMAPS['gist_yarg'][-1] = 0
 COLORMAPS['gist_yarg'][-2] = 0
 COLORMAPS['gist_yarg'][-3] = 255
 GAMMA_SHIFT = 3.5
+GAMMA = 0.0
+
+
+def get_download_path(key):
+    """Convenience method to return a path for a key"""
+    obj = get_object_or_404(SecurePath, key=key)
+    return obj.path
 
 
 def load_image(filename, gamma_offset=0.0, resolution=(1024, 1024)):
@@ -28,14 +41,25 @@ def load_image(filename, gamma_offset=0.0, resolution=(1024, 1024)):
     :param resolution: output size
     :return: resized PIL image
     """
+    obj = read_image(filename)
+    try:
+        raw_img = obj.image
+    except:
+        try:
+            raw_img = obj.current_frame()
+        except:
+            raw_img = Image.fromarray(obj.data)
+    try:
+        raw_img = raw_img.convert('I')
+        gamma = obj.header.get('gamma', GAMMA)
+        disp_gamma = gamma * numpy.exp(gamma_offset + GAMMA_SHIFT) / 30.0
+        lut = stretch(disp_gamma)
+        raw_img = raw_img.point(list(lut), 'L')
+        raw_img.putpalette(COLORMAPS['gist_yarg'])
+    except AttributeError:
+        raw_img = Image.fromarray(obj.data)
+        print(raw_img, type(raw_img), dir(raw_img))
 
-    image_obj = read_image(filename)
-    gamma = image_obj.header['gamma']
-    disp_gamma = gamma * numpy.exp(gamma_offset + GAMMA_SHIFT)/30.0
-    raw_img = image_obj.image.convert('I')
-    lut = stretch(disp_gamma)
-    raw_img = raw_img.point(list(lut), 'L')
-    raw_img.putpalette(COLORMAPS['gist_yarg'])
     return raw_img.resize(resolution, Image.ANTIALIAS)
 
 
@@ -50,7 +74,6 @@ def create_png(filename, output, brightness, resolution=(1024, 1024)):
     :param resolution: output size
     :return: PNG Image
     """
-
     img_info = load_image(filename, brightness, resolution)
     dir_name = os.path.dirname(output)
     if not os.path.exists(dir_name) and dir_name != '':

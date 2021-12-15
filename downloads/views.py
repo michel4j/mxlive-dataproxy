@@ -1,20 +1,22 @@
-from models import SecurePath
-from django.conf import settings
 from django import http
-from django.http import HttpResponse, Http404, HttpResponseRedirect, JsonResponse
+from django.conf import settings
+from django.http import HttpResponse, StreamingHttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
 from django.views.static import serve
 from django.views.generic import View
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
+
+from downloads.models import SecurePath
+import downloads.utils as utils
+
 import os
 import posixpath
 import re
 import glob
 import subprocess
 import urllib
-import utils
-from django.http import StreamingHttpResponse
+from pathlib import Path
 
 
 USER_DIR = getattr(settings, 'DOWNLOAD_USERS_DIR', '/users')
@@ -52,12 +54,6 @@ class CreatePath(View):
         obj.path = re.sub(ROOT_RE, USER_DIR, full_path)
         obj.save()
         return JsonResponse({'key': obj.key})
-
-
-def get_download_path(key):
-    """Convenience method to return a path for a key"""
-    obj = get_object_or_404(SecurePath, key=key)
-    return obj.path
 
 
 def send_uncompressed_file(request, key, full_path):
@@ -114,7 +110,7 @@ def send_raw_file(request, full_path, attachment=False):
 
 def send_snapshot(request, key, path):
     try:
-        directory = get_download_path(key)
+        directory = utils.get_download_path(key)
     except:
         return send_raw_file(request, utils.get_missing_snapshot())
 
@@ -142,32 +138,39 @@ def send_snapshot(request, key, path):
     return send_raw_file(request, utils.get_missing_snapshot())
 
 
-def send_frame(request, key, path, brightness):
-    try:
-        directory = get_download_path(key)
-    except:
+class SendFrame(View):
+
+    def get(self, request, *args, **kwargs):
+        key = kwargs.get('key')
+        path = kwargs.get('path')
+        brightness = kwargs.get('brightness')
+        try:
+            directory = utils.get_download_path(key)
+        except:
+            return send_raw_file(request, utils.get_missing_frame())
+        if not os.path.exists(directory):
+            directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
+        if os.path.exists(directory):
+            cache_path = os.path.splitext(path)[0]
+            frame_image = os.path.join(CACHE_DIR, key, cache_path, '{}.png'.format(brightness))
+            frame_file = os.path.join(directory, path)
+            frame_path = Path(path)
+            if os.path.exists(frame_image):
+                return send_raw_file(request, frame_image, attachment=False)
+            elif os.path.exists(frame_file) or re.match(r'\d+', frame_path.name):
+                target_dir = os.path.dirname(frame_image)
+                if not os.path.exists(target_dir):
+                    os.makedirs(target_dir)
+                utils.create_png(frame_file, frame_image, BRIGHTNESS.get(brightness, 0.0))
+                return send_raw_file(request, frame_image)
+
         return send_raw_file(request, utils.get_missing_frame())
-    if not os.path.exists(directory):
-        directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
-    if os.path.exists(directory):
-        cache_path = os.path.splitext(path)[0]
-        frame_image = os.path.join(CACHE_DIR, key, cache_path, '{}.png'.format(brightness))
-        frame_file = os.path.join(directory, path)
-        if os.path.exists(frame_image):
-            return send_raw_file(request, frame_image, attachment=False)
-        elif os.path.exists(frame_file):
-            target_dir = os.path.dirname(frame_image)
-            if not os.path.exists(target_dir):
-                os.makedirs(target_dir)
-            utils.create_png(frame_file, frame_image, BRIGHTNESS.get(brightness, 0.0))
-            return send_raw_file(request, frame_image)
-    return send_raw_file(request, utils.get_missing_frame())
 
 
 def send_file(request, key, path):
-    document_root = get_download_path(key)
+    document_root = utils.get_download_path(key)
     # Clean up given path to only allow serving files below document_root.
-    path = posixpath.normpath(urllib.unquote(path))
+    path = posixpath.normpath(urllib.parse.unquote(path))
     drive, path = os.path.splitdrive(path)  # Remove drive in case path is absolute
     path = path.lstrip(os.path.sep)
     full_path = os.path.normpath(os.path.join(document_root, path))
@@ -204,4 +207,3 @@ def send_archive(request, key, path):  # Add base parameter and another url
         return response
     else:
         return http.HttpResponseNotFound()
-
