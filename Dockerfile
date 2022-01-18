@@ -7,7 +7,11 @@ RUN dnf clean all && rm -r /var/cache/dnf  && dnf upgrade -y && dnf update -y
 RUN dnf -y update && dnf clean all
 
 RUN dnf -y update && dnf -y install httpd python-pip mod_wsgi postgresql-libs python-psycopg2 mod_xsendfile \
-  python-crypto python-memcached mod_ssl python-docutils unzip tar && dnf clean all
+  python-crypto python-memcached mod_ssl python-docutils unzip tar libgfortran hdf5 libquadmath python3-lz4 && dnf clean all
+
+ADD CBFlib-0.9.6-1.el8.x86_64.rpm /
+RUN rpm -ivh CBFlib-0.9.6-1.el8.x86_64.rpm
+
 
 ADD requirements.txt /
 RUN pip install --upgrade pip && pip install -r requirements.txt
@@ -21,6 +25,8 @@ ADD deploy/wait-for-it.sh /wait-for-it.sh
 RUN chmod -v +x /run-server.sh /wait-for-it.sh
 RUN /bin/rm /etc/httpd/conf.d/ssl.conf
 RUN /bin/cp /dataserver/deploy/dataserver.conf /etc/httpd/conf.d/
+
+RUN dnf -y install libglvnd-glx
 
 RUN /usr/bin/python3 /dataserver/manage.py collectstatic --noinput
 

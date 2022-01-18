@@ -23,7 +23,7 @@ COLORMAPS['gist_yarg'][-1] = 0
 COLORMAPS['gist_yarg'][-2] = 0
 COLORMAPS['gist_yarg'][-3] = 255
 GAMMA_SHIFT = 3.5
-GAMMA = 0.0
+GAMMA = 1.0
 
 
 def get_download_path(key):
@@ -42,23 +42,14 @@ def load_image(filename, gamma_offset=0.0, resolution=(1024, 1024)):
     :return: resized PIL image
     """
     obj = read_image(filename)
-    try:
-        raw_img = obj.image
-    except:
-        try:
-            raw_img = obj.current_frame()
-        except:
-            raw_img = Image.fromarray(obj.data)
-    try:
-        raw_img = raw_img.convert('I')
-        gamma = obj.header.get('gamma', GAMMA)
-        disp_gamma = gamma * numpy.exp(gamma_offset + GAMMA_SHIFT) / 30.0
-        lut = stretch(disp_gamma)
-        raw_img = raw_img.point(list(lut), 'L')
-        raw_img.putpalette(COLORMAPS['gist_yarg'])
-    except AttributeError:
-        raw_img = Image.fromarray(obj.data)
-        print(raw_img, type(raw_img), dir(raw_img))
+    raw_img = Image.fromarray(obj.data)
+
+    gamma = obj.header.get('gamma', GAMMA)
+    disp_gamma = gamma * numpy.exp(gamma_offset + GAMMA_SHIFT) / 10.0
+    raw_img = raw_img.convert('I')
+    lut = stretch(disp_gamma)
+    raw_img = raw_img.point(list(lut), 'L')
+    raw_img.putpalette(COLORMAPS['gist_yarg'])
 
     return raw_img.resize(resolution, Image.ANTIALIAS)
 

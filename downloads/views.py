@@ -30,7 +30,7 @@ ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/users')
 ROOT_RE = re.compile('^{}'.format(USER_ROOT))
 ARCHIVE_RE = re.compile('^{}'.format(USER_DIR))
 
-BRIGHTNESS = {'xl': -1.5, 'nm': 0.0, 'dk': 1.5, 'lt': -0.5}
+BRIGHTNESS = {'xl': -1.5, 'nm': 0.5, 'dk': 1.5, 'lt': -0.5}
 
 import logging
 logging.basicConfig()
@@ -163,6 +163,8 @@ class SendFrame(View):
                     os.makedirs(target_dir)
                 utils.create_png(frame_file, frame_image, BRIGHTNESS.get(brightness, 0.0))
                 return send_raw_file(request, frame_image)
+            else:
+                print("neither")
 
         return send_raw_file(request, utils.get_missing_frame())
 

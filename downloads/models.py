@@ -11,6 +11,7 @@ class SecurePath(models.Model):
     created = models.DateTimeField(auto_now_add=True, db_index=True)
 
     def save(self, *args, **kwargs):
+        return super(SecurePath, self).save(*args, **kwargs)
         # create new key and save if key is not already
         # in the database
 
