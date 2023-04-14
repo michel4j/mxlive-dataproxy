@@ -4,13 +4,17 @@ from django.shortcuts import get_object_or_404
 from downloads.models import SecurePath
 
 import os
+import cv2
 import pickle
 import numpy
+import matplotlib
 import shutil
 from PIL import Image
 
 from mxio import read_image
 from mxio.utils import stretch
+
+MIN_MAX_PERCENTILES = (1, 99.85)
 
 
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
@@ -18,11 +22,12 @@ COLOR_FILE = open(os.path.join(DATA_DIR, 'colormaps.data'), 'rb')
 COLORMAPS = pickle.load(COLOR_FILE)
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
 
-# Modify default colormap to add overloaded pixel effect
-COLORMAPS['gist_yarg'][-1] = 0
-COLORMAPS['gist_yarg'][-2] = 0
-COLORMAPS['gist_yarg'][-3] = 255
-GAMMA_SHIFT = 3.5
+c_map = matplotlib.cm.get_cmap('binary')
+rgba_data = matplotlib.cm.ScalarMappable(cmap=c_map).to_rgba(numpy.arange(0, 1.0, 1.0 / 256.0), bytes=True)
+rgba_data = rgba_data[:, :-1].reshape((256, 1, 3))
+COLOR_MAP = rgba_data[:, :, ::-1]
+
+
 GAMMA = 1.0
 
 
@@ -32,26 +37,26 @@ def get_download_path(key):
     return obj.path
 
 
-def load_image(filename, gamma_offset=0.0, resolution=(1024, 1024)):
+def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     """
-    Read file and return an PIL image of desired resolution histogram stretched by the
-    requested gamma_offset
+    Read file and return an PIL image of desired resolution histogram
     :param filename: Image File (e.g. filename.img, filename.cbf)
-    :param gamma_offset: default 0.0
     :param resolution: output size
     :return: resized PIL image
     """
     obj = read_image(filename)
-    raw_img = Image.fromarray(obj.data)
 
-    gamma = obj.header.get('gamma', GAMMA)
-    disp_gamma = gamma * numpy.exp(gamma_offset + GAMMA_SHIFT) / 10.0
-    raw_img = raw_img.convert('I')
-    lut = stretch(disp_gamma)
-    raw_img = raw_img.point(list(lut), 'L')
-    raw_img.putpalette(COLORMAPS['gist_yarg'])
+    w, h = obj.frame.data.shape
+    sub_data = obj.frame.data[:h//2, :w//2]
+    selected = (sub_data >= 0) & (sub_data < obj.frame.cutoff_value)
+    stats_data = sub_data if not selected.sum() else sub_data[selected]
 
-    return raw_img.resize(resolution, Image.ANTIALIAS)
+    minimum, maximum = numpy.percentile(stats_data, MIN_MAX_PERCENTILES)
+    img0 = cv2.convertScaleAbs(obj.frame.data - minimum, None, brightness * 255 / maximum, 0)
+    img1 = cv2.applyColorMap(img0, COLOR_MAP)
+    image = cv2.cvtColor(img1, cv2.COLOR_BGR2BGRA)
+    image = cv2.resize(image, resolution)
+    return image
 
 
 def create_png(filename, output, brightness, resolution=(1024, 1024)):
@@ -69,7 +74,7 @@ def create_png(filename, output, brightness, resolution=(1024, 1024)):
     dir_name = os.path.dirname(output)
     if not os.path.exists(dir_name) and dir_name != '':
         os.makedirs(dir_name)
-    img_info.save(output, 'PNG')
+    cv2.imwrite(output, img_info)
 
 
 def get_missing_image(src='frame-missing.png'):

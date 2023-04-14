@@ -30,7 +30,7 @@ ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/users')
 ROOT_RE = re.compile('^{}'.format(USER_ROOT))
 ARCHIVE_RE = re.compile('^{}'.format(USER_DIR))
 
-BRIGHTNESS = {'xl': -1.5, 'nm': 0.5, 'dk': 1.5, 'lt': -0.5}
+BRIGHTNESS = {'xl': 0.25, 'nm': 1.0, 'dk': 1.5, 'lt': 0.5}
 
 import logging
 logging.basicConfig()
