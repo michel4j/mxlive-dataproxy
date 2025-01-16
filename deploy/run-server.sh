@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -ex
+
 export SERVER_NAME=${SERVER_NAME:-$(hostname --fqdn)}
 
 # Make sure we're not confused by old, incompletely-shutdown httpd
@@ -7,6 +9,9 @@ export SERVER_NAME=${SERVER_NAME:-$(hostname --fqdn)}
 # if it thinks it is already running.
 rm -rf /run/httpd/* /tmp/httpd*
 
+if [ -z "${APACHE_UID}" ]; then
+    usermod --non-unique --uid ${APACHE_UID}  apache
+fi
 if [ ! -f /dataserver/local/.dbinit ]; then
     /dataserver/manage.py migrate --noinput &&
     touch /dataserver/local/.dbinit
