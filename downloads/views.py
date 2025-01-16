@@ -1,23 +1,18 @@
+import os
+import re
+import subprocess
+from pathlib import Path, PurePath
+
 from django import http
 from django.conf import settings
 from django.http import HttpResponse, StreamingHttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
-from django.views.static import serve
-from django.views.generic import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import View
+from django.views.static import serve
 
-from downloads.models import SecurePath
 import downloads.utils as utils
-
-import os
-import posixpath
-import re
-import glob
-import subprocess
-import urllib
-from pathlib import Path, PurePath
-
+from downloads.models import SecurePath
 
 USER_DIR = getattr(settings, 'DOWNLOAD_USERS_DIR', '/users')
 ARCHIVE_DIR = getattr(settings, 'DOWNLOAD_ARCHIVE_DIR', '/archive')
@@ -27,12 +22,13 @@ FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
 USER_ROOT = getattr(settings, 'LDAP_USER_ROOT', '/users')
 ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/users')
 
-ROOT_RE = re.compile('^{}'.format(USER_ROOT))
-ARCHIVE_RE = re.compile('^{}'.format(USER_DIR))
+ROOT_RE = re.compile(rf'^{USER_ROOT}')
+ARCHIVE_RE = re.compile(rf'^{USER_DIR}')
 
 BRIGHTNESS = {'xl': 0.25, 'nm': 1.0, 'dk': 1.5, 'lt': 0.5}
 
 import logging
+
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 
@@ -117,8 +113,8 @@ def send_snapshot(request, key, path):
     if not directory:
         file_paths.append(Path(utils.get_missing_snapshot()))
     else:
-        file_paths.append(Path(directory) / path)
-        file_paths.append(Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)) / path)
+        file_paths.append((Path(directory) / path).absolute())
+        file_paths.append((Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)) / path).absolute())
 
     for file_path in file_paths:
         if file_path.exists():
@@ -147,8 +143,8 @@ class SendFrame(View):
             return send_raw_file(request, utils.get_missing_frame())
         else:
             frame_paths = [
-                Path(directory) / path,
-                Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)) / path
+                Path(directory).absolute() / path,
+                Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)).absolute() / path
             ]
 
             for frame_path in frame_paths:
@@ -166,8 +162,8 @@ def send_file(request, key, path):
         return http.HttpResponseNotFound()
 
     full_paths = [
-        Path(document_root) / clean_path(path),
-        Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, document_root)) / clean_path(path),
+        Path(document_root).absolute() / clean_path(path),
+        Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, document_root)).absolute() / clean_path(path),
     ]
     for full_path in full_paths:
         if full_path.exists():
@@ -184,11 +180,12 @@ def send_archive(request, key, path):  # Add base parameter and another url
         return http.HttpResponseNotFound()
 
     full_paths = [
-        Path(document_root),
-        Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, document_root)),
+        Path(document_root).absolute(),
+        Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, document_root)).absolute(),
     ]
 
     for full_path in full_paths:
+        print(full_paths)
         if full_path.exists():
             process = subprocess.Popen(
                 ['tar', '-czf', '-', full_path.name],
