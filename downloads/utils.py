@@ -9,17 +9,14 @@ import pickle
 import numpy
 import matplotlib
 import shutil
-from PIL import Image
+from dataclasses import dataclass, field
 
 from mxio import read_image
-from mxio.utils import stretch
 
 MIN_MAX_PERCENTILES = (1, 99.85)
 
 
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
-COLOR_FILE = open(os.path.join(DATA_DIR, 'colormaps.data'), 'rb')
-COLORMAPS = pickle.load(COLOR_FILE)
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
 
 c_map = matplotlib.cm.get_cmap('binary')
@@ -33,19 +30,19 @@ GAMMA = 1.0
 
 def get_download_path(key):
     """Convenience method to return a path for a key"""
-    obj = get_object_or_404(SecurePath, key=key)
-    return obj.path
+    obj = SecurePath.objects.filter(key=key).first()
+    return obj.path if obj else None
 
 
 def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     """
     Read file and return an PIL image of desired resolution histogram
+    :param brightness:  brightness factor
     :param filename: Image File (e.g. filename.img, filename.cbf)
     :param resolution: output size
     :return: resized PIL image
     """
     obj = read_image(filename)
-
     w, h = obj.frame.data.shape
     sub_data = obj.frame.data[:h//2, :w//2]
     selected = (sub_data >= 0) & (sub_data < obj.frame.cutoff_value)
