@@ -1,7 +1,8 @@
-Django
+Django==4.2.18
+matplotlib
 django-cors-headers
 PyYaml==5.1
 pillow
 mxio
 opencv-contrib-python
-
+psycopg2-binary
