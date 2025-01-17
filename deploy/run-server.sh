@@ -9,7 +9,9 @@ export SERVER_NAME=${SERVER_NAME:-$(hostname --fqdn)}
 # if it thinks it is already running.
 rm -rf /run/httpd/* /tmp/httpd*
 
-if [ -z "${APACHE_UID}" ]; then
+if [ -z "$APACHE_UID" ]; then
+  echo "Default Apache UID will be used!"
+else
     usermod --non-unique --uid ${APACHE_UID}  apache
 fi
 if [ ! -f /dataserver/local/.dbinit ]; then
