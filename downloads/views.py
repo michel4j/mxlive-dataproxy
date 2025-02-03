@@ -185,7 +185,6 @@ def send_archive(request, key, path):  # Add base parameter and another url
     ]
 
     for full_path in full_paths:
-        print(full_paths)
         if full_path.exists():
             process = subprocess.Popen(
                 ['tar', '-czf', '-', full_path.name],
