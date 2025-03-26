@@ -11,12 +11,12 @@ class SecurePath(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Create new key and save it to the database
+        Create new key and save it to the database if no key is set
         """
-
-        h = hashlib.new('ripemd160')  # no successful collision attacks yet
-        h.update(self.path.encode('utf-8') + uuid4().bytes)
-        self.key = h.hexdigest()
+        if not self.key:
+            h = hashlib.new('ripemd160')  # no successful collision attacks yet
+            h.update(self.path.encode('utf-8') + uuid4().bytes)
+            self.key = h.hexdigest()
         return super().save(*args, **kwargs)
 
     def __str__(self):
