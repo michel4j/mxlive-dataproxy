@@ -14,17 +14,10 @@ from django.views.static import serve
 import downloads.utils as utils
 from downloads.models import SecurePath
 
-USER_DIR = getattr(settings, 'DOWNLOAD_USERS_DIR', '/users')
-ARCHIVE_DIR = getattr(settings, 'DOWNLOAD_ARCHIVE_DIR', '/archive')
+DOWNLOAD_DIRS = getattr(settings, 'DOWNLOAD_DIRS', [])      # directories from which downloads are allowed
+SUBSTITUTE_DIRS = getattr(settings, 'SUBSTITUTE_DIRS', [])  # list of directories that are equivalent to the download
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/cache')
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
-
-USER_ROOT = getattr(settings, 'LDAP_USER_ROOT', '/users')
-ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/users')
-
-ROOT_RE = re.compile(rf'^{USER_ROOT}')
-ARCHIVE_RE = re.compile(rf'^{USER_DIR}')
-
 BRIGHTNESS = {'xl': 0.25, 'nm': 1.0, 'dk': 1.5, 'lt': 0.5}
 
 import logging
@@ -45,11 +38,13 @@ class CreatePath(View):
 
     def post(self, request, *args, **kwargs):
         path = request.POST.get('path')
-        obj = SecurePath()
-        full_path = path if path.startswith(USER_ROOT) else os.path.join(USER_ROOT, path)
-        obj.path = re.sub(ROOT_RE, USER_DIR, full_path)
-        obj.save()
-        return JsonResponse({'key': obj.key})
+        key = None
+        if any(path.startswith(d) for d in DOWNLOAD_DIRS):
+            obj = SecurePath()
+            obj.path = path
+            obj.save()
+            key = obj.key
+        return JsonResponse({'key': key})
 
 
 def send_uncompressed_file(request, key, full_path):
@@ -107,14 +102,33 @@ def send_raw_file(request, full_path, attachment=False):
     return response
 
 
+def make_alternates(path):
+    """
+    Generate a list of alternate paths for a given path
+    :param path: The Path to generate alternates for
+    :return: List of alternate paths
+    """
+    path_str = str(path)
+
+    alternates = [path]
+    # find which string path starts with, then replace that string with the
+    # others in the list of substitutes
+    for sub in SUBSTITUTE_DIRS:
+        if re.match(rf'^{sub}', path_str):
+            regex = re.compile(rf'^{sub}')
+            for repl in set(SUBSTITUTE_DIRS) - {sub}:
+                alternates.append(Path(re.sub(regex, repl, path_str)))
+            break
+    return alternates
+
+
 def send_snapshot(request, key, path):
     directory = utils.get_download_path(key)
     file_paths = []
     if not directory:
         file_paths.append(Path(utils.get_missing_snapshot()))
     else:
-        file_paths.append((Path(directory) / path).absolute())
-        file_paths.append((Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)) / path).absolute())
+        file_paths.extend(make_alternates((Path(directory) / path).absolute()))
 
     for file_path in file_paths:
         if file_path.exists():
@@ -142,10 +156,7 @@ class SendFrame(View):
         elif not directory:
             return send_raw_file(request, utils.get_missing_frame())
         else:
-            frame_paths = [
-                Path(directory).absolute() / path,
-                Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)).absolute() / path
-            ]
+            frame_paths = make_alternates(Path(directory).absolute() / path)
 
             for frame_path in frame_paths:
                 if frame_path.exists() or re.match(r'\d+', frame_path.name):
@@ -161,10 +172,7 @@ def send_file(request, key, path):
     if not document_root:
         return http.HttpResponseNotFound()
 
-    full_paths = [
-        Path(document_root).absolute() / clean_path(path),
-        Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, document_root)).absolute() / clean_path(path),
-    ]
+    full_paths = make_alternates(Path(document_root).absolute() / clean_path(path))
     for full_path in full_paths:
         if full_path.exists():
             return send_raw_file(request, full_path)
@@ -179,10 +187,7 @@ def send_archive(request, key, path):  # Add base parameter and another url
     if not document_root:
         return http.HttpResponseNotFound()
 
-    full_paths = [
-        Path(document_root).absolute(),
-        Path(re.sub(ARCHIVE_RE, ARCHIVE_DIR, document_root)).absolute(),
-    ]
+    full_paths = make_alternates(Path(document_root).absolute())
 
     for full_path in full_paths:
         if full_path.exists():
