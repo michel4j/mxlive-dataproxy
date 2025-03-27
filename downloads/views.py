@@ -124,11 +124,10 @@ def make_alternates(path):
 
 def send_snapshot(request, key, path):
     directory = utils.get_download_path(key)
-    file_paths = []
-    if not directory:
-        file_paths.append(Path(utils.get_missing_snapshot()))
-    else:
-        file_paths.extend(make_alternates((Path(directory) / path).absolute()))
+
+    file_paths = make_alternates((Path(directory) / path).absolute())
+    file_paths.extend(make_alternates((Path(directory).parent / 'centering' / path).absolute()))
+    file_paths.append(Path(utils.get_missing_snapshot()))
 
     for file_path in file_paths:
         if file_path.exists():
