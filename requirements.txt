@@ -1,4 +1,4 @@
-Django==4.2.18
+Django==4.2.22
 matplotlib
 django-cors-headers
 PyYaml==5.1
