@@ -14,8 +14,9 @@ from django.views.static import serve
 import downloads.utils as utils
 from downloads.models import SecurePath
 
-DOWNLOAD_DIRS = getattr(settings, 'DOWNLOAD_DIRS', [])      # directories from which downloads are allowed
-SUBSTITUTE_DIRS = getattr(settings, 'SUBSTITUTE_DIRS', [])  # list of directories that are equivalent to the download
+DOWNLOAD_DIRS = getattr(settings, 'DOWNLOAD_DIRS', [])          # directories from which downloads are allowed
+DOWNLOAD_ROOT = getattr(settings, 'LDAP_USER_ROOT', '/users')    # where to find relative directories starting with user
+SUBSTITUTE_DIRS = getattr(settings, 'SUBSTITUTE_DIRS', [])      # list of directories that are equivalent to the download
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/cache')
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
 BRIGHTNESS = {'xl': 0.25, 'nm': 1.0, 'dk': 1.5, 'lt': 0.5}
@@ -38,6 +39,7 @@ class CreatePath(View):
 
     def post(self, request, *args, **kwargs):
         path = request.POST.get('path')
+        path = path if path.startswith('/') else os.path.join(DOWNLOAD_ROOT, path)
         key = None
         if any(path.startswith(d) for d in DOWNLOAD_DIRS):
             obj = SecurePath()
