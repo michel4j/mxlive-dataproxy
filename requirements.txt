@@ -1,4 +1,4 @@
-Django==4.2.22
+Django==4.2.30
 matplotlib
 django-cors-headers
 PyYaml==5.1
@@ -6,3 +6,4 @@ pillow
 mxio
 opencv-contrib-python
 psycopg2-binary
+scikit-image

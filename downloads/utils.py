@@ -10,6 +10,9 @@ import matplotlib
 import shutil
 
 from mxio import read_image
+from skimage.measure import block_reduce
+from skimage.exposure import rescale_intensity
+
 
 MIN_MAX_PERCENTILES = (1, 99.85)
 
@@ -20,10 +23,9 @@ CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
 c_map = matplotlib.cm.get_cmap('binary')
 rgba_data = matplotlib.cm.ScalarMappable(cmap=c_map).to_rgba(numpy.arange(0, 1.0, 1.0 / 256.0), bytes=True)
 rgba_data = rgba_data[:, :-1].reshape((256, 1, 3))
-COLOR_MAP = rgba_data[:, :, ::-1]
-
-
-GAMMA = 1.0
+COLOR_MAP = numpy.array([[[i, i, i]] for i in reversed(range(256))], dtype=numpy.uint8)
+COLOR_MAP[255] = [255, 0, 0]
+COLOR_MAP[0] = [250, 250, 254]
 
 
 def get_download_path(key):
@@ -35,22 +37,39 @@ def get_download_path(key):
 def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     """
     Read file and return an PIL image of desired resolution histogram
-    :param brightness:  brightness factor
     :param filename: Image File (e.g. filename.img, filename.cbf)
+    :param brightness: float (1.5=dark; -0.5=light)
     :param resolution: output size
     :return: resized PIL image
     """
-    obj = read_image(filename)
-    w, h = obj.frame.data.shape
-    sub_data = obj.frame.data[:h//2, :w//2]
-    selected = (sub_data >= 0) & (sub_data < obj.frame.cutoff_value)
-    stats_data = sub_data if not selected.sum() else sub_data[selected]
 
+    obj = read_image(filename)
+    frame = obj.frame
+    size = min(resolution)
+
+    half_size = int(min(frame.size.x - frame.center.x, frame.center.x, frame.size.y - frame.center.y, frame.center.y))
+    full_size = half_size * 2
+    w, h = frame.data.shape
+
+    mask = frame.data < 0
+    overload = frame.data > frame.cutoff_value
+
+    selected = ~(mask | overload)
+    stats_data = frame.data[selected]
     minimum, maximum = numpy.percentile(stats_data, MIN_MAX_PERCENTILES)
-    img0 = cv2.convertScaleAbs(obj.frame.data - minimum, None, brightness * 255 / maximum, 0)
-    img1 = cv2.applyColorMap(img0, COLOR_MAP)
-    image = cv2.cvtColor(img1, cv2.COLOR_BGR2BGRA)
-    image = cv2.resize(image, resolution)
+    brightness_scale = 3 ** brightness
+    alpha = 253 / max(maximum * brightness_scale, 10)
+    beta = -minimum * alpha
+    img0 = cv2.convertScaleAbs(frame.data, alpha=alpha, beta=beta)
+    img0 = numpy.clip(img0, 0, 253) + 1
+    img0[mask] = 0
+    img0[overload] = 255
+
+    kernel_size = (1 + full_size // size, 1 + full_size // size)
+    img1 = block_reduce(img0, block_size=kernel_size, func=numpy.max)
+    img2 = cv2.applyColorMap(img1, COLOR_MAP)
+    image = cv2.cvtColor(img2, cv2.COLOR_BGR2BGRA)
+
     return image
 
 
