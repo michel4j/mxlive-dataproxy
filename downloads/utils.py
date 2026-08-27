@@ -65,7 +65,7 @@ def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     img0[mask] = 0
     img0[overload] = 255
 
-    kernel_size = (1 + full_size // size, 1 + full_size // size)
+    kernel_size = (full_size // size, full_size // size)
     img1 = block_reduce(img0, block_size=kernel_size, func=numpy.max)
     img2 = cv2.applyColorMap(img1, COLOR_MAP)
     image = cv2.cvtColor(img2, cv2.COLOR_BGR2BGRA)
