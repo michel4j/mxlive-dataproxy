@@ -4,7 +4,6 @@ from django.shortcuts import get_object_or_404
 from .models import SecurePath
 
 import os
-import cv2
 import numpy
 import matplotlib
 import shutil
@@ -56,7 +55,7 @@ def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
 
     img = downsample(frame, size, func=numpy.max)   
     hi = numpy.percentile(img, MAX_PERCENTILE)
-    image =  exposure.rescale_intensity(img, in_range=(0, hi), out_range=(0, 255)).astype(numpy.uint8)
+    image = exposure.rescale_intensity(img, in_range=(0, hi), out_range=(0, 255)).astype(numpy.uint8)
     
     return image
 
