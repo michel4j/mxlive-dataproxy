@@ -13,6 +13,12 @@ The service enforces four behavioral boundaries:
 - Normalized request paths may be resolved under a user root and substitute directories before the file is served.
 - Generated preview assets are stored under a separate cache directory so the source data remains isolated from runtime rendering.
 
+## Deployment model
+
+The application is packaged as a container image built by `deploy/build-image.sh` and launched by `deploy/run-server.sh`. The runtime image starts Apache httpd with a WSGI mount for the Django app, and the container-level configuration lives in `deploy/dataserver.conf`.
+
+This means the data proxy is not a standalone Django development server in production: it is a containerized Apache/WSGI deployment that exposes the same request flow inside a managed runtime. The reverse proxy or hosting environment is expected to route traffic to the container, while the app itself enforces the key-based access layer for download requests.
+
 ## Core request flow
 
 1. A caller requests a path through `CreatePath`.
