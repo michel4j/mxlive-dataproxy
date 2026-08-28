@@ -19,13 +19,6 @@ MAX_PERCENTILE = 99.8
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
 
-c_map = matplotlib.cm.get_cmap('binary')
-rgba_data = matplotlib.cm.ScalarMappable(cmap=c_map).to_rgba(numpy.arange(0, 1.0, 1.0 / 256.0), bytes=True)
-rgba_data = rgba_data[:, :-1].reshape((256, 1, 3))
-COLOR_MAP = numpy.array([[[i, i, i]] for i in reversed(range(256))], dtype=numpy.uint8)
-COLOR_MAP[255] = [255, 0, 0]
-COLOR_MAP[0] = [250, 250, 254]
-
 
 def get_download_path(key):
     """Convenience method to return a path for a key"""
@@ -33,7 +26,7 @@ def get_download_path(key):
     return obj.path if obj else None
 
 
-def downsample(frame, size):   
+def downsample(frame, size, fun=numpy.max):   
     factor = min(frame.size.x // size, frame.size.y//size)
     data = frame.data
     kernel = (factor, factor)
@@ -62,9 +55,25 @@ def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
 
     img = downsample(frame, size, func=numpy.max)
     adj = 2 * brightness / 10
-    hi = hi or numpy.percentile(img, MAX_PERCENTILE - adj)
-    image =  exposure.rescale_intensity(img, in_range=(lo, hi), out_range=(0, 255)).astype(numpy.uint8)
+    hi = numpy.percentile(img, MAX_PERCENTILE - adj)
+    image =  exposure.rescale_intensity(img, in_range=(0, hi), out_range=(0, 255)).astype(numpy.uint8)
+    
     return image
+
+
+def array_to_png(data, filename, cmap='viridis'):
+    # Create a figure without default frames
+    h, w = data.shape
+    dpi=100
+    fig  = plt.figure(frameon=False)
+    fig.set_size_inches(h/dpi, w/dpi)
+
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    ax.imshow(data, cmap=cmap)
+    fig.savefig(filename, bbox_inches='tight', pad_inches=0, dpi=dpi)
+    plt.close()
 
 
 def create_png(filename, output, brightness, resolution=(1024, 1024)):
@@ -82,7 +91,7 @@ def create_png(filename, output, brightness, resolution=(1024, 1024)):
     dir_name = os.path.dirname(output)
     if not os.path.exists(dir_name) and dir_name != '':
         os.makedirs(dir_name)
-    cv2.imwrite(output, img_info)
+    array_to_png(img_info, output)
 
 
 def get_missing_image(src='frame-missing.png'):
