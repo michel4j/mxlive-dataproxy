@@ -126,13 +126,19 @@ def make_alternates(path):
 
 def send_snapshot(request, key, path):
     directory = utils.get_download_path(key)
-    snapshot_path = (Path(directory) / path).absolute()
     file_paths = []
-    suffixes = ['.webp', '.png', '.gif']
-    for suffix in suffixes:
-        file_paths.extend(make_alternates(snapshot_path.with_suffix(suffix)))
+    if directory:
+        snapshot_path = (Path(directory) / path).absolute()
+        suffixes = ['.webp', '.png', '.gif']
+        for suffix in suffixes:
+            file_paths.extend(make_alternates(snapshot_path.with_suffix(suffix)))
 
-    file_paths.append(Path(utils.get_missing_snapshot()))
+    try:
+        missing_snapshot = utils.get_missing_snapshot()
+        if missing_snapshot:
+            file_paths.append(Path(missing_snapshot))
+    except (FileNotFoundError, IOError):
+        pass
 
     for file_path in file_paths:
         if file_path.exists():

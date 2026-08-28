@@ -8,6 +8,15 @@ def client():
     return Client()
 
 
+@pytest.fixture(autouse=True)
+def mock_missing_snapshot_placeholder(monkeypatch, setup_test_environment):
+    """Ensure missing snapshot placeholder is present in test environment."""
+    cache_dir = setup_test_environment["cache_dir"]
+    placeholder = cache_dir / "snapshot-missing.gif"
+    placeholder.write_bytes(b"dummy missing snapshot gif")
+    monkeypatch.setattr("downloads.utils.get_missing_snapshot", lambda: str(placeholder))
+
+
 @pytest.mark.django_db
 def test_send_snapshot_invalid_key_serves_missing_snapshot_placeholder(client):
     """When a key is invalid/missing, send_snapshot falls back to serving snapshot-missing.gif."""
