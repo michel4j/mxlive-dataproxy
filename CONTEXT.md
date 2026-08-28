@@ -19,6 +19,19 @@ The application is packaged as a container image built by `deploy/build-image.sh
 
 This means the data proxy is not a standalone Django development server in production: it is a containerized Apache/WSGI deployment that exposes the same request flow inside a managed runtime. The reverse proxy or hosting environment is expected to route traffic to the container, while the app itself enforces the key-based access layer for download requests.
 
+## Validation and rollout for container updates
+
+The Python 3.14 slim migration is a packaging change, not a product change, so the rollout gate is operational rather than feature-level. A release should only proceed after the rebuilt image passes a minimal smoke-test sequence that exercises the same runtime contract as production.
+
+1. Build validation: rebuild the image with the project’s normal `deploy/build-image.sh` path and verify the final image uses the supported Python base without leftover compiler or package-manager artifacts.
+2. Runtime startup validation: start the container and confirm `deploy/run-server.sh` still initializes database migrations, creates the required local runtime directories, and launches Apache in the foreground without crashing.
+3. Apache and WSGI validation: check that `deploy/dataserver.conf` loads cleanly, that the `XSendFilePath` entries still include `/users`, `/archive`, and `/cache`, and that the WSGI mount serves the Django app instead of failing during import.
+4. Secure-download validation: POST to `/data/create/` with a configured path, confirm the response contains a 40-character key, and then request the protected file route using that key to verify the file-serving flow still resolves and returns the expected response headers.
+5. Placeholder and cache validation: request a missing frame or snapshot and confirm the operation falls back to a placeholder rather than exposing a raw filesystem error.
+6. Canary rollout: deploy the rebuilt image to a staging or single-host slot first, keep the previous image available for rollback, and watch Apache logs for WSGI import failures, X-Sendfile path errors, or missing runtime directories.
+
+This keeps the migration narrow and safe: the application behavior remains the same, while the container packaging and runtime assumptions are validated before broad rollout.
+
 ## Core request flow
 
 1. A caller requests a path through `CreatePath`.
