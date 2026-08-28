@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 
-from downloads.models import SecurePath
+from .models import SecurePath
 
 import os
 import cv2
@@ -10,11 +10,10 @@ import matplotlib
 import shutil
 
 from mxio import read_image
-from skimage.measure import block_reduce
-from skimage.exposure import rescale_intensity
+from skimage import measure, exposure
 
 
-MIN_MAX_PERCENTILES = (1, 99.85)
+MAX_PERCENTILE = 99.8
 
 
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
@@ -34,6 +33,20 @@ def get_download_path(key):
     return obj.path if obj else None
 
 
+def downsample(frame, size):   
+    factor = min(frame.size.x // size, frame.size.y//size)
+    data = frame.data
+    kernel = (factor, factor)
+    data = measure.block_reduce(data, block_size=kernel, func=func)
+    h, w = data.shape
+    cx, cy = w//2, h//2
+    hw = size // 2
+    
+    x0, y0 = cx - hw, cy - hw
+    x1, y1 = x0 + size, y0 + size
+    return data[y0:y1, x0:x1]  
+
+
 def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     """
     Read file and return an PIL image of desired resolution histogram
@@ -47,29 +60,10 @@ def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     frame = obj.frame
     size = min(resolution)
 
-    half_size = int(min(frame.size.x - frame.center.x, frame.center.x, frame.size.y - frame.center.y, frame.center.y))
-    full_size = half_size * 2
-    w, h = frame.data.shape
-
-    mask = frame.data < 0
-    overload = frame.data > frame.cutoff_value
-
-    selected = ~(mask | overload)
-    stats_data = frame.data[selected]
-    minimum, maximum = numpy.percentile(stats_data, MIN_MAX_PERCENTILES)
-    brightness_scale = 3 ** brightness
-    alpha = 253 / max(maximum * brightness_scale, 10)
-    beta = -minimum * alpha
-    img0 = cv2.convertScaleAbs(frame.data, alpha=alpha, beta=beta)
-    img0 = numpy.clip(img0, 0, 253) + 1
-    img0[mask] = 0
-    img0[overload] = 255
-
-    kernel_size = (full_size // size, full_size // size)
-    img1 = block_reduce(img0, block_size=kernel_size, func=numpy.max)
-    img2 = cv2.applyColorMap(img1, COLOR_MAP)
-    image = cv2.cvtColor(img2, cv2.COLOR_BGR2BGRA)
-
+    img = downsample(frame, size, func=numpy.max)
+    adj = 2 * brightness / 10
+    hi = hi or numpy.percentile(img, MAX_PERCENTILE - adj)
+    image =  exposure.rescale_intensity(img, in_range=(lo, hi), out_range=(0, 255)).astype(numpy.uint8)
     return image
 
 
