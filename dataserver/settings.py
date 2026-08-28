@@ -71,10 +71,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'dataserver.wsgi.application'
 
-CORS_ORIGIN_WHITELIST = (
+CORS_ALLOWED_ORIGINS = [
     'https://cmcf.lightsource.ca',
     'http://127.0.0.1',
-)
+]
 
 # Database
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
