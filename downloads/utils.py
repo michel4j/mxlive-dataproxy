@@ -14,7 +14,7 @@ from skimage import measure, exposure
 from matplotlib import pyplot as plt
 
 
-MAX_PERCENTILE = 99.8
+MAX_PERCENTILE = 99.985
 
 
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
@@ -54,15 +54,14 @@ def load_image(filename, brightness=0.0, resolution=(1024, 1024)):
     frame = obj.frame
     size = min(resolution)
 
-    img = downsample(frame, size, func=numpy.max)
-    adj = 2 * brightness / 10
-    hi = numpy.percentile(img, MAX_PERCENTILE - adj)
+    img = downsample(frame, size, func=numpy.max)   
+    hi = numpy.percentile(img, MAX_PERCENTILE)
     image =  exposure.rescale_intensity(img, in_range=(0, hi), out_range=(0, 255)).astype(numpy.uint8)
     
     return image
 
 
-def array_to_png(data, filename, cmap='viridis'):
+def array_to_png(data, filename, cmap='magma'):
     # Create a figure without default frames
     h, w = data.shape
     dpi=100
