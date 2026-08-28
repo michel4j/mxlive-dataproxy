@@ -11,6 +11,7 @@ import shutil
 
 from mxio import read_image
 from skimage import measure, exposure
+from matplotlib import pyplot as plt
 
 
 MAX_PERCENTILE = 99.8
@@ -26,7 +27,7 @@ def get_download_path(key):
     return obj.path if obj else None
 
 
-def downsample(frame, size, fun=numpy.max):   
+def downsample(frame, size, func=numpy.max):   
     factor = min(frame.size.x // size, frame.size.y//size)
     data = frame.data
     kernel = (factor, factor)
