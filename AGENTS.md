@@ -8,3 +8,9 @@ Using the default canonical triage vocabulary: `needs-triage`, `needs-info`, `re
 
 ### Domain docs
 Single-context repo layout: one root `CONTEXT.md` and `docs/adr/` for ADRs. See `docs/agents/domain.md`.
+
+### Environment Constraints
+- You are operating inside a restricted workspace.
+- The project's Python virtual environment is located at `./.venv`.
+- CRITICAL: Never run bare `python` or `pip` commands. 
+- You must always invoke the environment explicitly using `./.venv/bin/python`, `./.venv/bin/pytest` or `./.venv/bin/pip`.
