@@ -1,7 +1,7 @@
 Django==6.1.*
 matplotlib
-django-cors-headers>=4.7,<5
-PyYaml==5.1
+django-cors-headers
+PyYaml
 pillow
 mxio
 opencv-contrib-python
