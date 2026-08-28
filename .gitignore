@@ -121,3 +121,7 @@ local/*
 !local/settings.py.example
 .idea/workspace.xml
 
+/.agents/
+/.idea/
+/.idea/
+/skills-lock.json
