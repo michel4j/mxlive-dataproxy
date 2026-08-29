@@ -4,11 +4,13 @@ set -ex
 
 export SERVER_NAME=${SERVER_NAME:-$(hostname --fqdn)}
 
+# Wait for Database
+/wait-for-it.sh database:5432 -t 60
+
 # Clear runtime contexts
 rm -rf /var/run/apache2/* /tmp/apache2*
 
 APP_DIRECTORY="/dataserver"
-
 
 # Make sure the local directory is a Python package
 if [ ! -f ${APP_DIRECTORY}/local/__init__.py ]; then
@@ -29,12 +31,11 @@ for trial in {1..5}; do
     sleep 5
 done
 
-# Run Django management using the Virtual Environment's Python binary
-if [ ! -f "${APP_DIRECTORY}/local/.dbinit" ]; then
-
+# Initialize Cache Directory
+if [ ! -f "/cache/.init" ]; then
     # Update ownership to 'www-data' (Debian)
     chown -R www-data:www-data /cache
-    touch ${APP_DIRECTORY}/local/.dbinit
+    touch /cache/.init
 fi
 
 # Launch Debian's apache2 binary using its standard environment variables
