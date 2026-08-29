@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import subprocess
 from pathlib import Path, PurePath
 
@@ -38,7 +39,8 @@ def create_cache_dir(key):
 class CreatePath(View):
 
     def post(self, request, *args, **kwargs):
-        path = request.POST.get('path')
+        data = json.loads(request.body)
+        path = data.get('path') or ''
         path = path if path.startswith('/') else os.path.join(USER_ROOT, path)
         key = None
         if any(path.startswith(d) for d in DOWNLOAD_DIRS):
