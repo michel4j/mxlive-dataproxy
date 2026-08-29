@@ -1,7 +1,7 @@
 # =========================================================
 # STAGE 1: The Builder (Heavy, contains compilers and source code)
 # =========================================================
-FROM python:3.14-slim AS builder
+FROM python:3.13-slim AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 COPY requirements.txt /
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -17,7 +17,7 @@ RUN python3 -m venv /venv && \
 # =========================================================
 # STAGE 2: The Final Runtime (Lean, clean, and fast)
 # =========================================================
-FROM python:3.14-slim
+FROM python:3.13-slim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apache2 \
@@ -45,9 +45,11 @@ RUN mkdir -p /dataserver/local && \
     # Adjust shebang in management script to point to the venv
     sed -i -E 's@#!/usr/bin/env python.*@#!/venv/bin/python3@' /dataserver/manage.py
 
-# Run framework tasks
+# Run framework tasks and redirect logs to console
 RUN /venv/bin/python3 /dataserver/manage.py collectstatic --noinput && \
-    rm -rf /dataserver/deploy
+    rm -rf /dataserver/deploy && \
+    ln -sf /proc/self/fd/1 /var/log/apache2/access.log && \
+    ln -sf /proc/self/fd/2 /var/log/apache2/error.log
 
 EXPOSE 80
 VOLUME ["/users", "/archive", "/cache"]
