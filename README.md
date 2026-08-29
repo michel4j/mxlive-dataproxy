@@ -55,6 +55,7 @@ Build the image from the project directory:
 ./deploy/build-image.sh
 ```
 
+An example `container-compose.yml` file is provided. Adapt it accordingly.
 When integrating into a larger MxLIVE deployment:
 
 1. Place your `settings.py` file in a separate local folder mapped to the local volume.
@@ -75,3 +76,26 @@ This repo includes architecture and decision records describing the design decis
 ## Security note
 
 This service intentionally does not expose raw storage paths to requesters. All protected access is mediated by key lookup, path validation, and deployment-defined allowlists.
+
+
+## Testing
+
+To test the service on a directory of diffraction images `/data/test`, containing CBF files `frame_001.cbf ... frame_nnn.cbf` for example,
+create a Download Key using the API as follows:
+
+```bash
+curl -i -H "Content-Type: application/json" -d '{"path":"/data/test"}' http://localhost:8000/download/data/create/
+```
+The POST request should return a key similar to `5bb2e3a426795b48adbc1584e97a720f3d36e16b`. You can then use the
+key to access data from the directory as follows:
+
+```bash
+wget http://localhost:8000/download/files/frame/5bb2e3a426795b48adbc1584e97a720f3d36e16b/frame_001.cbf/nm.png
+```
+
+Fetches a PNG image of the diffraction with normal rendering. Use:
+
+- `nm` - Normal rendering
+- `dk` - Dark rendering
+- `lt` - Light rendering
+- `xl` - Extra-light rendering
