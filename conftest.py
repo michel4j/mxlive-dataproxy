@@ -32,7 +32,7 @@ def setup_test_environment(tmp_path, monkeypatch, settings):
     import downloads.utils as utils
 
     monkeypatch.setattr(views, 'CACHE_DIR', str(test_cache_dir))
-    monkeypatch.setattr(views, 'DOWNLOAD_ROOT', str(test_user_root))
+    monkeypatch.setattr(views, 'USER_ROOT', str(test_user_root))
     monkeypatch.setattr(views, 'DOWNLOAD_DIRS', [str(test_download_dir), str(test_user_root)])
     monkeypatch.setattr(views, 'SUBSTITUTE_DIRS', [])
     monkeypatch.setattr(views, 'FRONTEND', 'static')
