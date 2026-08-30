@@ -47,11 +47,11 @@ def test_send_frame_cache_miss_renders_png(client, sample_secure_path, setup_tes
 
     monkeypatch.setattr(utils, "create_png", mock_create_png)
 
-    # Test with brightness code 'xl' (0.25)
+    # Test with brightness code 'xl'
     response = client.get(f"/download/files/frame/{sp.key}/frame_001.cbf/xl.png")
     assert response.status_code == 200
     assert len(created_calls) == 1
-    assert created_calls[0][2] == 0.25
+    assert created_calls[0][2] == 0.2
 
 
 @pytest.mark.django_db

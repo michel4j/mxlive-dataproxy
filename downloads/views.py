@@ -55,7 +55,7 @@ def get_content_type(filename):
 class CreatePath(View):
 
     def post(self, request, *args, **kwargs):
-        data = json.loads(request.body)
+        data = request.POST
         path = data.get('path') or ''
         path = path if path.startswith('/') else os.path.join(USER_ROOT, path)
         key = None
