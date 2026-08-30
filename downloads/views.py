@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import mimetypes
 import subprocess
 from pathlib import Path, PurePath
 
@@ -21,11 +22,11 @@ SUBSTITUTE_DIRS = getattr(settings, 'SUBSTITUTE_DIRS', [])      # list of direct
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/cache')
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
 BRIGHTNESS = {
-    'xl': -0.2,
-    'lt': -0.1,
+    'xl': 0.2,
+    'lt': 0.1,
     'nm': 0.0,
-    'dk': 0.1,
-    'xd': 0.2,
+    'dk': -0.1,
+    'xd': -0.2,
 }
 
 import logging
@@ -39,6 +40,14 @@ def create_cache_dir(key):
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def get_content_type(filename):
+    # Returns a tuple: (MIME_type, encoding)
+    mime_type, encoding = mimetypes.guess_type(filename)
+
+    # Fallback to a default binary stream type if unknown
+    return mime_type or "application/octet-stream"
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -84,15 +93,13 @@ def send_raw_file(request, full_path, attachment=False):
         logger.warning("Path not found: {}".format(file_path))
         return http.HttpResponseNotFound()
 
+    content_type = get_content_type(file_path)
+
     if FRONTEND == "xsendfile":
         response = HttpResponse()
         response['X-Sendfile'] = str(file_path)
         if attachment:
             response['Content-Disposition'] = f'attachment; filename={file_path.name}'
-
-        # Unset the Content-Type as to allow for the webserver
-        # to determine it.
-        response['Content-Type'] = ''
 
     elif FRONTEND == "xaccelredirect":
         response = HttpResponse()
@@ -100,7 +107,6 @@ def send_raw_file(request, full_path, attachment=False):
 
         if attachment:
             response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(file_path)
-        response['Content-Type'] = ''
 
     else:
         dirname = str(file_path.parent)
@@ -109,6 +115,7 @@ def send_raw_file(request, full_path, attachment=False):
         # "Serving file %s in directory %s through django static serve." % (path, dirname)
         response = serve(request, path, dirname)
 
+    response['Content-Type'] = content_type
     return response
 
 

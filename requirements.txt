@@ -1,6 +1,6 @@
 Django==6.1.*
 matplotlib
 django-cors-headers
-mxio
+mxio >= 2025.10.8
 psycopg2-binary
 scikit-image
