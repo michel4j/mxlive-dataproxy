@@ -27,3 +27,4 @@ CORS_ALLOWED_ORIGINS = [
 
 # Allowlisted directories, only paths in these directories can be served
 DOWNLOAD_DIRS = ['/data', '/home', '/tmp']
+DOWNLOAD_FRAME_COLORMAP = 'magma'

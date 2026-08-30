@@ -21,6 +21,7 @@ USER_ROOT = getattr(settings, 'USER_ROOT', '/users')            # where to find 
 SUBSTITUTE_DIRS = getattr(settings, 'SUBSTITUTE_DIRS', [])      # list of directories that are equivalent to the download
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/cache')
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
+
 BRIGHTNESS = {
     'xl': 0.2,
     'lt': 0.1,

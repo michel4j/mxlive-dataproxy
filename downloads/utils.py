@@ -23,6 +23,7 @@ SIZE = 1024
 
 DATA_DIR = os.path.join(settings.BASE_DIR, 'data')
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/tmp')
+FRAME_COLORMAP = getattr(settings, 'DOWNLOAD_FRAME_COLORMAP', 'gist_yarg')
 
 
 def get_download_path(key):
@@ -57,7 +58,7 @@ def downsample(frame: mxio.ImageFrame, size: int = SIZE, func=numpy.max):
     return data
 
 
-def frame_to_png(path, filename, brightness=0.0, size=SIZE, cmap='magma'):
+def frame_to_png(path, filename, brightness=0.0, size=SIZE, cmap='gist_yarg'):
     """
     Convert a Diffraction frame to a lower resolution PNG image, adjusting the histogram
     to improve visibility of spots
@@ -111,7 +112,7 @@ def create_png(filename: str, output: str, brightness: float, resolution=(1024, 
     if not os.path.exists(dir_name) and dir_name != '':
         os.makedirs(dir_name)
     size = min(resolution)
-    frame_to_png(filename, output, brightness, size=size, cmap='gist_yarg')
+    frame_to_png(filename, output, brightness, size=size, cmap=FRAME_COLORMAP)
 
 
 def get_missing_image(src='frame-missing.png'):
