@@ -24,8 +24,6 @@ SECRET_KEY = 'e&9lwk#!q!ab*m(@w1=-!+#x90cbp7h8=6a7uk7*wf7*tw7g=%'
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-DOWNLOAD_FRONTEND = 'static'
-DOWNLOAD_CACHE_DIR = 'cache'
 
 # Application definition
 
@@ -71,10 +69,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'dataserver.wsgi.application'
 
-CORS_ORIGIN_WHITELIST = (
-    'https://cmcf.lightsource.ca',
+CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1',
-)
+    'http://localhost',
+    'https://localhost',
+]
 
 # Database
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
@@ -112,17 +111,18 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
-USE_L10N = True
-
 USE_TZ = True
 
-
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATIC_URL = '/static/'
-LDAP_USER_ROOT = '/users'
+
+USER_ROOT = '/users'
+SUBSTITUTE_DIRS = []
+DOWNLOAD_FRONTEND = 'xsendfile'
+DOWNLOAD_CACHE_DIR = '/cache'
+DOWNLOAD_DIRS = []
 
 try:
     from local.settings import *

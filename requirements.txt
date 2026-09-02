@@ -1,6 +1,6 @@
-Django==4.0
+Django==6.1.*
+matplotlib
 django-cors-headers
-PyYaml==5.1
-mxio
-opencv-contrib-python
-
+mxio >= 2025.10.8
+psycopg2-binary
+scikit-image

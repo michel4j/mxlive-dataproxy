@@ -1,141 +1,172 @@
+import os
+import re
+import json
+import mimetypes
+import subprocess
+from pathlib import Path, PurePath
+
 from django import http
 from django.conf import settings
 from django.http import HttpResponse, StreamingHttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
-from django.views.static import serve
-from django.views.generic import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import View
+from django.views.static import serve
 
-from downloads.models import SecurePath
 import downloads.utils as utils
+from downloads.models import SecurePath
 
-import os
-import posixpath
-import re
-import glob
-import subprocess
-import urllib
-from pathlib import Path
-
-
-USER_DIR = getattr(settings, 'DOWNLOAD_USERS_DIR', '/users')
-ARCHIVE_DIR = getattr(settings, 'DOWNLOAD_ARCHIVE_DIR', '/archive')
+DOWNLOAD_DIRS = getattr(settings, 'DOWNLOAD_DIRS', [])          # directories from which downloads are allowed
+USER_ROOT = getattr(settings, 'USER_ROOT', '/users')            # where to find relative directories starting with user
+SUBSTITUTE_DIRS = getattr(settings, 'SUBSTITUTE_DIRS', [])      # list of directories that are equivalent to the download
 CACHE_DIR = getattr(settings, 'DOWNLOAD_CACHE_DIR', '/cache')
 FRONTEND = getattr(settings, 'DOWNLOAD_FRONTEND', 'xsendfile')
 
-USER_ROOT = getattr(settings, 'LDAP_USER_ROOT', '/users')
-ARCHIVE_ROOT = getattr(settings, 'ARCHIVE_ROOT', '/users')
-
-ROOT_RE = re.compile('^{}'.format(USER_ROOT))
-ARCHIVE_RE = re.compile('^{}'.format(USER_DIR))
-
-BRIGHTNESS = {'xl': 0.25, 'nm': 1.0, 'dk': 1.5, 'lt': 0.5}
+BRIGHTNESS = {
+    'xl': 0.2,
+    'lt': 0.1,
+    'nm': 0.0,
+    'dk': -0.1,
+    'xd': -0.2,
+}
 
 import logging
+
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
 def create_cache_dir(key):
-    dir_name = os.path.join(CACHE_DIR, key)
-    if not os.path.exists(dir_name):
-        os.makedirs(dir_name)
-    return dir_name
+    directory = Path(CACHE_DIR) / key
+    if not directory.exists():
+        directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def get_content_type(filename):
+    # Returns a tuple: (MIME_type, encoding)
+    mime_type, encoding = mimetypes.guess_type(filename)
+
+    # Fallback to a default binary stream type if unknown
+    return mime_type or "application/octet-stream"
 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CreatePath(View):
 
     def post(self, request, *args, **kwargs):
-        path = request.POST.get('path')
-        obj = SecurePath()
-        full_path =  path if path.startswith(USER_ROOT) else os.path.join(USER_ROOT, path)
-        obj.path = re.sub(ROOT_RE, USER_DIR, full_path)
-        obj.save()
-        return JsonResponse({'key': obj.key})
+        data = request.POST
+        path = data.get('path') or ''
+        path = path if path.startswith('/') else os.path.join(USER_ROOT, path)
+        key = None
+        if any(path.startswith(d) for d in DOWNLOAD_DIRS):
+            obj = SecurePath()
+            obj.path = path
+            obj.save()
+            key = obj.key
+        return JsonResponse({'key': key})
 
 
 def send_uncompressed_file(request, key, full_path):
     create_cache_dir(key)
-    _, zfile = os.path.split(full_path)
-    cached_file = os.path.join(CACHE_DIR, key, zfile.strip('.gz'))
-    cmd = 'gunzip {0} {1}'.format(full_path, cached_file)
+    uncompressed_file = full_path.name.rstrip('.gz')
+    cached_file = Path(CACHE_DIR) / key / uncompressed_file
+    cmd = f'gunzip {full_path} {cached_file}'
     try:
         subprocess.check_call(cmd.split())
-    except:
+    except subprocess.CalledProcessError:
         return http.HttpResponseNotFound()
     return send_raw_file(request, cached_file)
 
 
 def send_raw_file(request, full_path, attachment=False):
-    """Send a file using mod_xsendfile or similar functionality.
-    Use django's static serve option for development servers"""
+    """
+    Send a file using mod_xsendfile or similar functionality.
+    Use django's static serve option for development servers
+    :param request: Django request object
+    :param full_path: Full path to file
+    :param attachment: Boolean to force download
+    """
 
-    original_path = full_path
-    archived_path = re.sub(ARCHIVE_RE, ARCHIVE_DIR, original_path)
+    file_path = Path(full_path)
 
-    file_path = original_path if os.path.exists(original_path) else archived_path
-    if not os.path.exists(file_path):
+    if not file_path.exists():
         logger.warning("Path not found: {}".format(file_path))
         return http.HttpResponseNotFound()
 
+    content_type = get_content_type(file_path)
+
     if FRONTEND == "xsendfile":
         response = HttpResponse()
-        response['X-Sendfile'] = file_path
+        response['X-Sendfile'] = str(file_path)
         if attachment:
-            response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(file_path)
-
-        # Unset the Content-Type as to allow for the webserver
-        # to determine it.
-        response['Content-Type'] = ''
+            response['Content-Disposition'] = f'attachment; filename={file_path.name}'
 
     elif FRONTEND == "xaccelredirect":
         response = HttpResponse()
-        response['X-Accel-Redirect'] = file_path
+        response['X-Accel-Redirect'] = str(file_path)
 
         if attachment:
             response['Content-Disposition'] = 'attachment; filename=%s' % os.path.basename(file_path)
-        response['Content-Type'] = ''
 
     else:
-        dirname = os.path.dirname(file_path)
-        path = os.path.basename(file_path)
+        dirname = str(file_path.parent)
+        path = file_path.name
 
         # "Serving file %s in directory %s through django static serve." % (path, dirname)
         response = serve(request, path, dirname)
 
+    response['Content-Type'] = content_type
     return response
 
 
-def send_snapshot(request, key, path):
-    try:
-        directory = utils.get_download_path(key)
-    except:
-        return send_raw_file(request, utils.get_missing_snapshot())
+def make_alternates(path):
+    """
+    Generate a list of alternate paths for a given path
+    :param path: The Path to generate alternates for
+    :return: List of alternate paths
+    """
+    path_str = str(path)
 
-    if not os.path.exists(directory):
-        directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
-    if os.path.exists(directory):
-        filename = os.path.join(CACHE_DIR, key, path)
-        original_file = os.path.join(directory, path)
-        name, ext = os.path.splitext(path)
-        pngs = glob.glob(os.path.join(directory, '{}*.png'.format(name)))
-        if ext.lower() == '.gif' and os.path.exists(filename):
-            return send_raw_file(request, filename, attachment=False)
-        elif ext == '.png' and os.path.exists(original_file):
-            return send_raw_file(request, original_file)
-        elif len(pngs) == 1:
-            return send_raw_file(request, pngs[0], attachment=False)
-        elif pngs:
-            create_cache_dir(key)
-            command = 'convert -delay 200 -resize 500x {0} {1}'.format(' '.join(pngs), filename)
-            try:
-                subprocess.check_call(command.split())
-            except subprocess.CalledProcessError:
-                return http.HttpResponseNotFound()
-            return send_raw_file(request, filename, attachment=False)
-    return send_raw_file(request, utils.get_missing_snapshot())
+    alternates = [path]
+    # find which string path starts with, then replace that string with the
+    # others in the list of substitutes
+    for sub in SUBSTITUTE_DIRS:
+        if re.match(rf'^{sub}', path_str):
+            regex = re.compile(rf'^{sub}')
+            for repl in set(SUBSTITUTE_DIRS) - {sub}:
+                alternates.append(Path(re.sub(regex, repl, path_str)))
+            break
+    return alternates
+
+
+def send_snapshot(request, key, path):
+    directory = utils.get_download_path(key)
+    file_paths = []
+    if directory:
+        snapshot_path = (Path(directory) / path).absolute()
+        suffixes = ['.webp', '.png', '.gif']
+        for suffix in suffixes:
+            file_paths.extend(make_alternates(snapshot_path.with_suffix(suffix)))
+
+    try:
+        missing_snapshot = utils.get_missing_snapshot()
+        if missing_snapshot:
+            file_paths.append(Path(missing_snapshot))
+    except (FileNotFoundError, IOError):
+        pass
+
+    for file_path in file_paths:
+        if file_path.exists():
+            return send_raw_file(request, file_path)
+    else:
+        return http.HttpResponseNotFound()
+
+
+def clean_path(path):
+    if path.startswith('/'):
+        path = path[1:]
+    return path
 
 
 class SendFrame(View):
@@ -144,68 +175,55 @@ class SendFrame(View):
         key = kwargs.get('key')
         path = kwargs.get('path')
         brightness = kwargs.get('brightness')
-        try:
-            directory = utils.get_download_path(key)
-        except:
+        directory = utils.get_download_path(key)
+        cache_image = Path(CACHE_DIR) / key / clean_path(PurePath(path).stem) / f'{brightness}.png'
+        if cache_image.exists():
+            return send_raw_file(request, cache_image)
+        elif not directory:
             return send_raw_file(request, utils.get_missing_frame())
-        if not os.path.exists(directory):
-            directory = re.sub(ARCHIVE_RE, ARCHIVE_DIR, directory)
-        if os.path.exists(directory):
-            cache_path = os.path.splitext(path)[0]
-            frame_image = os.path.join(CACHE_DIR, key, cache_path, '{}.png'.format(brightness))
-            frame_file = os.path.join(directory, path)
-            frame_path = Path(path)
-            if os.path.exists(frame_image):
-                return send_raw_file(request, frame_image, attachment=False)
-            elif os.path.exists(frame_file) or re.match(r'\d+', frame_path.name):
-                target_dir = os.path.dirname(frame_image)
-                if not os.path.exists(target_dir):
-                    os.makedirs(target_dir)
-                utils.create_png(frame_file, frame_image, BRIGHTNESS.get(brightness, 0.0))
-                return send_raw_file(request, frame_image)
-            else:
-                print("neither")
+        else:
+            frame_paths = make_alternates(Path(directory).absolute() / path)
 
-        return send_raw_file(request, utils.get_missing_frame())
+            for frame_path in frame_paths:
+                if frame_path.exists() or re.match(r'\d+', frame_path.name):
+                    if not cache_image.parent.exists():
+                        cache_image.parent.mkdir(parents=True, exist_ok=True)
+                    utils.create_png(frame_path, cache_image, BRIGHTNESS.get(brightness, 0.0))
+                    return send_raw_file(request, cache_image)
+            return send_raw_file(request, utils.get_missing_frame())
 
 
 def send_file(request, key, path):
     document_root = utils.get_download_path(key)
-    # Clean up given path to only allow serving files below document_root.
-    path = posixpath.normpath(urllib.parse.unquote(path))
-    drive, path = os.path.splitdrive(path)  # Remove drive in case path is absolute
-    path = path.lstrip(os.path.sep)
-    full_path = os.path.normpath(os.path.join(document_root, path))
-
-    if not full_path.startswith(document_root):
+    if not document_root:
         return http.HttpResponseNotFound()
 
-    if os.path.exists('{}.gz'.format(full_path)):
-        return send_uncompressed_file(request, key, full_path)
-
-    return send_raw_file(request, full_path)
+    full_paths = make_alternates(Path(document_root).absolute() / clean_path(path))
+    for full_path in full_paths:
+        if full_path.exists():
+            return send_raw_file(request, full_path)
+        elif full_path.with_suffix(full_path.suffix + '.gz').exists():
+            return send_uncompressed_file(request, key, full_path)
+    else:
+        return http.HttpResponseNotFound()
 
 
 def send_archive(request, key, path):  # Add base parameter and another url
-    obj = get_object_or_404(SecurePath, key=key)
-    target_path = obj.path.rstrip(os.sep)
+    document_root = utils.get_download_path(key)
+    if not document_root:
+        return http.HttpResponseNotFound()
 
-    if len(target_path.split(os.sep)) < 4:
-        return http.HttpResponseForbidden()
+    full_paths = make_alternates(Path(document_root).absolute())
 
-    archived_path = re.sub(ARCHIVE_RE, ARCHIVE_DIR, target_path)
-    source_path = os.path.normpath(target_path if os.path.exists(target_path) else archived_path)
-
-    if os.path.exists(source_path):
-        p = subprocess.Popen(
-            ['tar', '-czf', '-', os.path.basename(source_path)],
-            cwd=os.path.dirname(source_path),
-            stdout=subprocess.PIPE
-        )
-
-        response = StreamingHttpResponse(p.stdout, content_type='application/x-gzip')
-        response['Content-Disposition'] = 'attachment; filename={}'.format(path)
-
-        return response
+    for full_path in full_paths:
+        if full_path.exists():
+            process = subprocess.Popen(
+                ['tar', '-czf', '-', full_path.name],
+                cwd=full_path.parent,
+                stdout=subprocess.PIPE
+            )
+            response = StreamingHttpResponse(process.stdout, content_type='application/x-gzip')
+            response['Content-Disposition'] = f'attachment; filename={path}'
+            return response
     else:
         return http.HttpResponseNotFound()

@@ -1,0 +1,24 @@
+services:
+  database:
+    image: postgres:latest
+    restart: always
+    volumes:
+      - ./database:/var/lib/postgresql/data:Z
+    environment:
+      POSTGRES_PASSWORD: $DATABASE_PASSWORD
+      POSTGRES_USER: dataserver
+
+  dataserver:
+    image: mxlive-dataproxy:latest
+    environment:
+      MPLCONFIGDIR: /cache
+      DATABASE_PASSWORD: $DATABASE_PASSWORD
+    restart: always
+    depends_on:
+      - database
+    volumes:
+      - ./local:/dataserver/local:Z
+      - ./cache:/cache:Z
+      # Add mounts for the data specified in DOWNLOAD_DIRS
+      # - /data:/users:ro
+      # - /tmp:/archive:ro

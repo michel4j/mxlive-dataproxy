@@ -1,39 +1,56 @@
-FROM fedora:36
+# =========================================================
+# STAGE 1: The Builder (Heavy, contains compilers and source code)
+# =========================================================
+FROM python:3.13-slim AS builder
+ENV DEBIAN_FRONTEND=noninteractive
+COPY requirements.txt /
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    unzip \
+    tar
 
-MAINTAINER Kathryn Janzen <kathryn.janzen@lightsource.ca>
+# Build  virtual environment
+RUN python3 -m venv /venv && \
+    /venv/bin/pip install --upgrade pip && \
+    /venv/bin/pip install -r /requirements.txt
 
-RUN dnf clean all && rm -r /var/cache/dnf  && dnf upgrade -y && dnf update -y
+# =========================================================
+# STAGE 2: The Final Runtime (Lean, clean, and fast)
+# =========================================================
+FROM python:3.13-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    apache2 \
+    libapache2-mod-wsgi-py3 \
+    libapache2-mod-xsendfile \
+    tar \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN dnf -y update && dnf clean all
+# Pluck ONLY the finished, compiled work straight out of Stage 1
+COPY --from=builder /venv /venv
+COPY --from=builder /usr/local/lib/ /usr/local/lib/
 
-RUN dnf -y update && dnf -y install httpd python-pip mod_wsgi postgresql-libs python-psycopg2 mod_xsendfile \
-  python-crypto python-memcached mod_ssl python-docutils unzip tar libgfortran hdf5 libquadmath python3-lz4 && dnf clean all
+# Add package and utility scripts
+ADD . /dataserver
+COPY deploy/run-server.sh /run-server.sh
+COPY deploy/wait-for-it.sh /wait-for-it.sh
 
-ADD CBFlib-0.9.7-2.fc36.x86_64.rpm /
-RUN rpm -ivh CBFlib-0.9.7-2.fc36.x86_64.rpm
+# Post-installation configurations and directory setup
+RUN mkdir -p /dataserver/local && \
+    chmod +x /run-server.sh /wait-for-it.sh && \
+    # Clear default Debian site config and link your custom config
+    rm -f /etc/apache2/sites-enabled/000-default.conf && \
+    cp /dataserver/deploy/dataserver.conf /etc/apache2/sites-enabled/ && \
+    # Adjust shebang in management script to point to the venv
+    sed -i -E 's@#!/usr/bin/env python.*@#!/venv/bin/python3@' /dataserver/manage.py
 
-ADD pycbf-0.9.6.5-cp310-cp310-linux_x86_64.whl /
-RUN pip install pycbf-0.9.6.5-cp310-cp310-linux_x86_64.whl
-
-ADD requirements.txt /
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Run framework tasks and redirect logs to console
+RUN /venv/bin/python3 /dataserver/manage.py collectstatic --noinput && \
+    rm -rf /dataserver/deploy && \
+    ln -sf /proc/self/fd/1 /var/log/apache2/access.log && \
+    ln -sf /proc/self/fd/2 /var/log/apache2/error.log
 
 EXPOSE 80
-
-ADD . /dataserver
-ADD ./local /dataserver/local
-ADD deploy/run-server.sh /run-server.sh
-ADD deploy/wait-for-it.sh /wait-for-it.sh
-RUN chmod -v +x /run-server.sh /wait-for-it.sh
-RUN /bin/rm /etc/httpd/conf.d/ssl.conf
-RUN /bin/cp /dataserver/deploy/dataserver.conf /etc/httpd/conf.d/
-
-RUN dnf -y install libglvnd-glx
-
-RUN /usr/bin/python3 /dataserver/manage.py collectstatic --noinput
-
-VOLUME ["/users"]
-VOLUME ["/archive"]
-
+VOLUME ["/users", "/archive", "/cache"]
 CMD ["/run-server.sh"]
-
